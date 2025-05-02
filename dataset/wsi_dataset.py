@@ -15,7 +15,7 @@ class WSIDataset(Dataset):
         pad_mode (str): Padding strategy if WSI has fewer patches.
     """
 
-    def __init__(self, samples, labels, coordinates, n_patches=128, pad_mode='zero'):
+    def __init__(self, samples, labels, coordinates, n_patches=128, pad_mode='zero', seed=42):
         if not (len(samples) == len(labels) == len(coordinates)):
             raise ValueError(
                 f"Inconsistent lengths: samples({len(samples)}), labels({len(labels)}), coordinates({len(coordinates)})"
@@ -25,6 +25,7 @@ class WSIDataset(Dataset):
         self.labels = labels
         self.n_patches = n_patches
         self.pad_mode = pad_mode
+        self.seed = seed
 
     def __len__(self):
         return len(self.samples)
@@ -32,11 +33,13 @@ class WSIDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.samples[idx]  # shape: [num_patches, embed_dim]
         label = self.labels[idx]
+        g = torch.Generator()
+        g.manual_seed(self.seed + idx)
         coordinates = self.coordinates[idx]
         num_patches = sample.shape[0]
 
         if num_patches >= self.n_patches:
-            indices = torch.randperm(num_patches)[:self.n_patches]
+            indices = torch.randperm(num_patches, generator=g)[:self.n_patches]
             sampled_patches = sample[indices]
             sampled_coordinates = coordinates[indices]
             assert len(sampled_patches) == len(sampled_coordinates)
