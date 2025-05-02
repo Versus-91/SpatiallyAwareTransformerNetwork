@@ -15,13 +15,13 @@ def attention_scaled_dot_product(q, k, v, dist_embedding):
 
 
 class Attention(nn.Module):
-    def __init__(self, embedding_dim, num_heads, dist_num_embeddings, bin_width):
+    def __init__(self, embedding_dim, num_heads, **kwargs):
         assert embedding_dim % num_heads == 0, "embedding_dim must be divisible by num_heads"
         super().__init__()
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
-        self.dist_num_embeddings = dist_num_embeddings
-        self.bin_width = bin_width
+        self.dist_num_embeddings = kwargs.get("embeddings_num", 256)
+        self.bin_width = kwargs.get("distances_bin_width", 1024)
         self.head_dim = embedding_dim // num_heads
         self.to_qkv = nn.Linear(embedding_dim, 3 * embedding_dim)
         self.out = nn.Linear(embedding_dim, embedding_dim)
@@ -49,13 +49,13 @@ class Attention(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, dim, depth, heads, mlp_dim, distances_bin_width, embeddings_num, dropout=0.1):
+    def __init__(self, dim, depth, heads, mlp_dim, dropout=0.1, **kwargs):
         super().__init__()
         self.norm = nn.LayerNorm(dim)
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                Attention(dim, heads, embeddings_num, distances_bin_width),
+                Attention(dim, heads, **kwargs),
                 nn.Sequential(
                     nn.LayerNorm(dim),
                     nn.Linear(dim, mlp_dim),
@@ -75,10 +75,10 @@ class Transformer(nn.Module):
 
 class VisionTransformer(nn.Module):
 
-    def __init__(self, dim, depth, heads, mlp_dim, num_classes, distances_bin_width=1024, embeddings_num=256, dropout=0.1):
+    def __init__(self, dim, depth, heads, mlp_dim, num_classes, dropout=0.1, **kwargs):
         super().__init__()
         self.transformer = Transformer(
-            dim, depth, heads, mlp_dim, distances_bin_width, embeddings_num, dropout)
+            dim, depth, heads, mlp_dim, dropout, **kwargs)
         self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
         self.ffn_head = nn.Linear(dim, num_classes)
 
@@ -93,11 +93,11 @@ class VisionTransformer(nn.Module):
 
 if __name__ == '__main__':
     batch_size = 16
-    seq_length = 16 
+    seq_length = 16
     dim = 64  # embedding dim
     num_classes = 2
-    x = torch.randn(batch_size, seq_length, dim)  
-    coords = torch.randn(batch_size, seq_length, 2)  
+    x = torch.randn(batch_size, seq_length, dim)
+    coords = torch.randn(batch_size, seq_length, 2)
     model = VisionTransformer(
         dim=dim,
         depth=2,
