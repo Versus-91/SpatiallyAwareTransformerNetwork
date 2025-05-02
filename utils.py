@@ -23,7 +23,7 @@ def train(model, dataloader, optimizer, criterion, epochs=10, ignore_coordinates
 
 
 @torch.no_grad()
-def predict(model, data_loader, device):
+def predict(model, data_loader, device, ignore_coordinates=True):
     model.eval()  # Set model to evaluation mode
     predictions = []
     true_labels = []
@@ -32,9 +32,11 @@ def predict(model, data_loader, device):
 
         patches = patches.to(device)
         labels = labels.to(device)
-
-        outputs = model(patches)
-        probs = torch.sigmoid(outputs)
+        if ignore_coordinates:
+            logits = model(patches)
+        else:
+            logits = model(patches, coords)
+        probs = torch.sigmoid(logits)
         preds = (probs > 0.5).float()
         predictions.append(preds.cpu())
         true_labels.append(labels.cpu())
