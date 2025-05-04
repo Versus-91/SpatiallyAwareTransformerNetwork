@@ -15,18 +15,32 @@ def attention_scaled_dot_product(q, k, v, dist_embedding):
 
 
 class Attention(nn.Module):
-    def __init__(self, embedding_dim, num_heads, **kwargs):
-        assert embedding_dim % num_heads == 0, "embedding_dim must be divisible by num_heads"
+    """
+    Attributes
+    ----------
+    distances_bin_width (int):
+        Size of bins used for grouping distances.
+    distance_embedding (nn.Embedding):
+        Embedding table for distance bins, each represented by a scalar.
+    head_dim (int):
+        Dimensionality of each attention head.
+    num_distance_bins (int):
+        The total number of distinct distance bins for which embeddings will be learned.
+
+    """
+
+    def __init__(self, dim, num_heads, **kwargs):
+        assert dim % num_heads == 0, "embedding_dim must be divisible by num_heads"
         super().__init__()
-        self.embedding_dim = embedding_dim
+        self.embedding_dim = dim
         self.num_heads = num_heads
-        self.dist_num_embeddings = kwargs.get("embeddings_num", 256)
-        self.bin_width = kwargs.get("distances_bin_width", 1024)
-        self.head_dim = embedding_dim // num_heads
-        self.to_qkv = nn.Linear(embedding_dim, 3 * embedding_dim)
-        self.out = nn.Linear(embedding_dim, embedding_dim)
+        self.num_distance_bins = kwargs.get("embeddings_num", 256)
+        self.distances_bin_width = kwargs.get("distances_bin_width", 1024)
+        self.head_dim = self.embedding_dim // num_heads
+        self.to_qkv = nn.Linear(self.embedding_dim, 3 * self.embedding_dim)
+        self.out = nn.Linear(self.embedding_dim, self.embedding_dim)
         self.distance_embedding = torch.nn.Embedding(
-            num_embeddings=self.dist_num_embeddings, embedding_dim=1)
+            num_embeddings=self.num_distance_bins, embedding_dim=1)
 
     def forward(self, x, coordinates: None):
         batch_size, seq_length, _ = x.size()
@@ -40,7 +54,7 @@ class Attention(nn.Module):
         # b = coordinates.half().unsqueeze(1)  # [B, 1, N, 2]
         # distances = torch.linalg.norm(a - b, dim=-1)  # [B, N, N]
         distances = torch.cdist(coordinates.float(), coordinates.float(), p=2)
-        distance_bins = (distances / self.bin_width).floor().long()
+        distance_bins = (distances / self.distances_bin_width).floor().long()
         values, _ = attention_scaled_dot_product(
             q, k, v, self.distance_embedding(distance_bins).permute(0, 3, 1, 2))
         values = values.permute(0, 2, 1, 3)  # [Batch, SeqLen, Head, Dims]
@@ -49,6 +63,16 @@ class Attention(nn.Module):
 
 
 class Transformer(nn.Module):
+    """    
+    Attributes
+    ----------
+    norm (nn.LayerNorm): 
+        Layer normalization applied to the final output after all Transformer blocks.
+    layers (nn.ModuleList): 
+        A list of Transformer blocks.
+
+    """
+
     def __init__(self, dim, depth, heads, mlp_dim, dropout=0.1, **kwargs):
         super().__init__()
         self.norm = nn.LayerNorm(dim)
@@ -74,6 +98,34 @@ class Transformer(nn.Module):
 
 
 class VisionTransformer(nn.Module):
+    """
+    Vision Transformer (ViT) implementation.
+
+    Parameters
+    ----------
+    dim (int): 
+        Dimensionality of the input embeddings.
+    depth (int): 
+        Number of Transformer blocks.
+    heads (int): 
+        Number of attention heads in the multi-head self-attention mechanism.
+    mlp_dim (int): 
+        Hidden layer size of the feedforward network inside the Transformer.
+    num_classes (int): 
+        Number of output classes for classification.
+    dropout (float, optional): 
+        Dropout rate applied to both attention and MLP layers. Default is 0.1.
+    **kwargs: Additional arguments.
+
+    Attributes
+    ----------
+    transformer (nn.Module):
+        Transformer encoder consisting of `depth` number of Transformer blocks.
+    cls_tokens (shape: [1, 1, dim])):
+        Learnable token that is prepended to the input sequence.
+    ffn_head (Type: nn.Linear, output: [batch_size, num_classes]):
+        Final classification head that maps the cls token embedding to the output class scores.
+    """
 
     def __init__(self, dim, depth, heads, mlp_dim, num_classes, dropout=0.1, **kwargs):
         super().__init__()
@@ -94,7 +146,7 @@ class VisionTransformer(nn.Module):
 if __name__ == '__main__':
     batch_size = 16
     seq_length = 16
-    dim = 64  # embedding dim
+    dim = 64  
     num_classes = 2
     x = torch.randn(batch_size, seq_length, dim)
     coords = torch.randn(batch_size, seq_length, 2)

@@ -31,7 +31,7 @@ class WSIDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        sample = self.samples[idx]  # shape: [num_patches, embed_dim]
+        sample = self.samples[idx] 
         label = self.labels[idx]
         g = torch.Generator()
         g.manual_seed(self.seed + idx)
